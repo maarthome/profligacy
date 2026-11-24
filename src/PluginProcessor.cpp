@@ -1341,6 +1341,23 @@ public:
 	}
 	void resized() override { m_web.setBounds(getLocalBounds()); }
 
+	// LV2 hosts built on suil (jalv, Zynthian) resize an embedded X11 plug-in by
+	// enlarging its window directly; they do not call the plug-in's ui:resize hook.
+	// JUCE's LV2 wrapper would then put the window back to the editor's old size, so
+	// follow the host window instead. Other formats size the editor themselves.
+	void parentSizeChanged() override
+	{
+		if (m_proc.wrapperType != juce::AudioProcessor::wrapperType_LV2)
+			return;
+		if (auto *parent = getParentComponent())
+		{
+			const auto size = parent->getLocalBounds();
+			if (size.getWidth() > 0 && size.getHeight() > 0
+				&& (size.getWidth() != getWidth() || size.getHeight() != getHeight()))
+				setBoundsConstrained(size);
+		}
+	}
+
 private:
 	#if JUCE_WINDOWS
 	static juce::File webView2UserDataFolder()
