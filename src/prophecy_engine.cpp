@@ -1203,8 +1203,25 @@ bool ProphecyEngine::initializePlayback(bool firmwareHandshake)
 	const bool wasReady = m_impl->playback_ready.exchange(false, std::memory_order_acq_rel);
 	g_playback_input_enabled.store(false, std::memory_order_release);
 	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+	// PROFLIGACY_INIT_TRACE=1 prints each step of the start-up handshake to stderr,
+	// to see where a silent plug-in is stuck.
+	static const bool trace = std::getenv("PROFLIGACY_INIT_TRACE") != nullptr;
+	const auto traceStart = std::chrono::steady_clock::now();
+	auto lastTick = traceStart;
+	auto tracef = [&](const char *what) {
+		if (!trace) return;
+		const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now() - traceStart).count();
+		std::fprintf(stderr, "[init-trace] %6lld ms  frames=%llu  %s\n",
+			(long long) ms, (unsigned long long) requestedFrames(), what);
+	};
 	auto advance = [&] {
 		if (std::chrono::steady_clock::now() >= deadline) return false;
+		if (trace && std::chrono::steady_clock::now() - lastTick > std::chrono::seconds(2))
+		{
+			lastTick = std::chrono::steady_clock::now();
+			tracef("still waiting");
+		}
 		const auto end = (requestedFrames() / kAudioQuantum + 4) * kAudioQuantum;
 		// Initialization audio precedes the host epoch and must not fill the ring.
 		m_impl->timeline.seek(end);
@@ -1220,6 +1237,7 @@ bool ProphecyEngine::initializePlayback(bool firmwareHandshake)
 	};
 	const char* failure = "Firmware startup did not complete. Reload the plugin to try again.";
 	auto fail = [&] {
+		tracef("FAILED (deadline or stop)");
 		std::fprintf(stderr, "Profligacy initialization failed: %s\n", failure);
 		requestStop();
 		return false;
@@ -1229,6 +1247,7 @@ bool ProphecyEngine::initializePlayback(bool firmwareHandshake)
 		// The program page is firmware evidence that startup has reached the
 		// MIDI parser. Sending bytes during the power-on self-test can wedge it.
 		char line1[41]{}, line2[41]{};
+		tracef("waiting for the firmware program page on the LCD");
 		while (!latestLcd(line1, line2, sizeof(line1))
 			|| (line1[0] != 'A' && line1[0] != 'B')
 			|| line1[1] < '0' || line1[1] > '9' || line1[2] < '0' || line1[2] > '9'
@@ -1236,6 +1255,7 @@ bool ProphecyEngine::initializePlayback(bool firmwareHandshake)
 			if (!advance()) return fail();
 		// Universal inquiry is independent of the Korg SysEx receive filter and
 		// broadcasts across device channels. Its reply also identifies the channel.
+		tracef("program page seen; sending MIDI identity request");
 		failure = "Firmware did not answer its MIDI identity request. Reload the plugin to try again.";
 		const auto identity = g_identity_replies.load(std::memory_order_acquire);
 		const std::uint8_t request[] = {0xf0, 0x7e, 0x7f, 6, 1, 0xf7};
@@ -1243,6 +1263,7 @@ bool ProphecyEngine::initializePlayback(bool firmwareHandshake)
 		while (g_identity_replies.load(std::memory_order_acquire) == identity)
 			if (!advance()) return fail();
 
+		tracef("identity reply received");
 		// A completed program dump proves the firmware's startup work has settled
 		// before the first host-timed note. SysEx reception may be disabled, so a
 		// missing reply delays only this bounded readiness window.
@@ -1258,7 +1279,9 @@ bool ProphecyEngine::initializePlayback(bool firmwareHandshake)
 			if (!advance()) return fail();
 			g_program_dump_store.load(nullptr, 0, &version);
 		} while (version == before && requestedFrames() < responseEnd);
+		tracef(version != before ? "program dump received" : "no program dump (continuing)");
 	}
+	tracef("playback ready");
 	if (std::getenv("PROPHOST_INIT_STATS")) std::fprintf(stderr, "init ready at %llu\n", (unsigned long long) requestedFrames());
 	m_impl->playback_origin.store(requestedFrames(), std::memory_order_release);
 	g_playback_input_enabled.store(true, std::memory_order_release);
