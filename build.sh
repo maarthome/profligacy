@@ -3,7 +3,11 @@
 # The swap file is created before the build and always removed afterwards
 # (also on Ctrl-C or a failed build). /etc/fstab is never touched.
 #
-# Usage:   ./build.sh [--deps]        --deps: apt install the build dependencies first
+# Usage:   ./build.sh [--deps] [--optimize]
+#            --deps      apt install the build dependencies first
+#            --optimize  build MAME with -mcpu=cortex-a76 (Raspberry Pi 5 only; the
+#                        result will not run on a Pi 4). Switching this flag on or
+#                        off rebuilds the whole MAME core (hours on a Pi).
 # Options: SWAP_GB=6  JOBS=n  BUILD_DIR=build  (environment variables)
 set -euo pipefail
 
@@ -24,7 +28,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ "${1:-}" == "--deps" ]]; then
+DO_DEPS=0
+for arg in "$@"; do
+	case "$arg" in
+		--deps) DO_DEPS=1 ;;
+		--optimize)
+			if [[ "$(uname -m)" != aarch64 ]]; then
+				echo "error: --optimize is only for aarch64 (Raspberry Pi 5)" >&2
+				exit 1
+			fi
+			export MAME_ARCHOPTS="-mcpu=cortex-a76" ;;
+		*) echo "error: unknown option $arg" >&2; exit 1 ;;
+	esac
+done
+
+if [[ "$DO_DEPS" == 1 ]]; then
 	sudo apt update
 	sudo apt install -y build-essential cmake git python3 pkg-config \
 		libsdl2-dev libsdl2-ttf-dev libpulse-dev libx11-dev libxext-dev libxi-dev \

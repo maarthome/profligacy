@@ -31,7 +31,10 @@ case "$(uname -s)" in
 				exit 1 ;;
 		esac
 		MAME_TOOLCHAIN_DIR=linux_gcc
-		EXTRA_MAKE_ARGS+=("ARCHOPTS=-fPIC")
+		# MAME_ARCHOPTS: extra compiler flags for the whole MAME core, e.g.
+		# "-mcpu=cortex-a76" for a Raspberry Pi 5 (build.sh --optimize). Such binaries
+		# only run on that CPU family.
+		EXTRA_MAKE_ARGS+=("ARCHOPTS=-fPIC ${MAME_ARCHOPTS:-}")
 		# MAME enables PipeWire audio whenever libpipewire-dev is installed, which
 		# would make the plugin need libpipewire at link and run time. The engine
 		# runs with -sound none, so build without it. Objects built the other way
@@ -54,6 +57,19 @@ case "$(uname -s)" in
 		exit 1 ;;
 esac
 MAME_BIN="$MAME_DIR/build/$MAME_TOOLCHAIN_DIR/bin/x64/Release"
+
+# make does not rebuild when only the compiler flags change, so remember the flags
+# and, when they differ from the last build, drop the objects and archives (a full
+# MAME rebuild).
+if [[ "$(uname -s)" == Linux && -d "$MAME_DIR/build/projects" ]]; then
+	ARCHOPTS_STAMP="$MAME_DIR/build/.prophecy_archopts"
+	if [[ "$(cat "$ARCHOPTS_STAMP" 2>/dev/null || true)" != "${MAME_ARCHOPTS:-}" ]]; then
+		echo ">> MAME_ARCHOPTS changed (now: '${MAME_ARCHOPTS:-}'); cleaning old MAME objects for a full rebuild"
+		rm -rf "$MAME_DIR/build/projects/sdl/mamepropmin/gmake-linux/obj" "$MAME_DIR/build/$MAME_TOOLCHAIN_DIR"
+		find "$MAME_DIR/scripts" -name '*.a' -delete
+	fi
+	mkdir -p "$MAME_DIR/build" && printf '%s' "${MAME_ARCHOPTS:-}" > "$ARCHOPTS_STAMP"
+fi
 STAMP="$MAME_BIN/.prophecy_build_rev"
 
 # Make sure a working `python` is first on PATH (MAME's makefile probes for one
