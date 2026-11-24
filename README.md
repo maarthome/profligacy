@@ -96,6 +96,16 @@ Linux build notes:
 - With gcc 12 (e.g. Debian 12), some MAME warnings are errors; build with `NOWERROR=1 scripts/build_mame_core.sh --regen`.
 - The binary links the system's SDL2, PulseAudio, GTK 3 and WebKitGTK, so run it on the distribution it was built on, or a newer one.
 
+### Raspberry Pi 5 (aarch64) and Zynthian (My_Changes branch)
+
+Experimental, untested until built on real hardware. The TMS57002 DSP dynarec has an A64 backend, so `build_mame_core.sh` now accepts aarch64 Linux, and an LV2 target is built by default on Linux (`-DPROPHECY_BUILD_LV2=OFF` to skip). Build on the dev Pi, then copy the bundle to the Zynthian Pi:
+
+```sh
+scp -r build/ProphecyPlugin_artefacts/Release/LV2/Profligacy.lv2 root@zynthian:/zynthian/zynthian-plugins/lv2/
+```
+
+The ROMs are not bundled. On a headless host set `PROPHECY_ROMPATH` to the folder containing `korgprop/` (or `korgprop.zip`). If the DSP can't keep up in real time, set `PROPHECY_DSP_ENGINE=interpreter` only to compare, since the dynarec is the default.
+
 ## License
 
 Profligacy's own source is distributed under the GNU Affero General Public License, version 3 only. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the full license and dependency notices.

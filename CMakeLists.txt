@@ -347,6 +347,12 @@ elseif(APPLE)
 	set(PROPHECY_WEBVIEW2_TARGET_ARGS)
 else()
 	set(PROPHECY_PLUGIN_FORMATS VST3 Standalone)
+	# LV2 for hosts like Zynthian (JUCE generates the .ttl files at build time by
+	# loading the built plugin, so this needs a native build on the target arch).
+	option(PROPHECY_BUILD_LV2 "also build the LV2 plugin (Linux)" ON)
+	if(PROPHECY_BUILD_LV2)
+		list(APPEND PROPHECY_PLUGIN_FORMATS LV2)
+	endif()
 	# On Linux JUCE only adds the WebKitGTK/GTK flags the editor's web view needs
 	# when the target asks for them; JUCE_WEB_BROWSER=1 alone is not enough.
 	set(PROPHECY_WEBVIEW2_TARGET_ARGS NEEDS_WEB_BROWSER TRUE)
@@ -359,6 +365,7 @@ juce_add_plugin(ProphecyPlugin
 	PLUGIN_MANUFACTURER_CODE Prfl
 	PLUGIN_CODE Pflg
 	FORMATS ${PROPHECY_PLUGIN_FORMATS}
+	LV2URI "https://github.com/maarthome/profligacy"
 	IS_SYNTH TRUE
 	NEEDS_MIDI_INPUT TRUE
 	EDITOR_WANTS_KEYBOARD_FOCUS FALSE

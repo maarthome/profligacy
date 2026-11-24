@@ -24,10 +24,12 @@ case "$(uname -s)" in
 	Linux)
 		# MAME's default Linux goal always builds with gcc into linux_gcc
 		# (its makefile ignores an environment CC).
-		if [[ "$(uname -m)" != x86_64 ]]; then
-			echo "error: only x86_64 Linux is supported (got $(uname -m))" >&2
-			exit 1
-		fi
+		case "$(uname -m)" in
+			x86_64|aarch64) ;;  # the TMS57002 dynarec has x64 and A64 backends
+			*)
+				echo "error: only x86_64 and aarch64 Linux are supported (got $(uname -m))" >&2
+				exit 1 ;;
+		esac
 		MAME_TOOLCHAIN_DIR=linux_gcc
 		EXTRA_MAKE_ARGS+=("ARCHOPTS=-fPIC")
 		# MAME's emumem_* files need ~1.5 GB per cc1plus, and an OOM-killed compile
