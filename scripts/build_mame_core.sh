@@ -32,6 +32,15 @@ case "$(uname -s)" in
 		esac
 		MAME_TOOLCHAIN_DIR=linux_gcc
 		EXTRA_MAKE_ARGS+=("ARCHOPTS=-fPIC")
+		# MAME enables PipeWire audio whenever libpipewire-dev is installed, which
+		# would make the plugin need libpipewire at link and run time. The engine
+		# runs with -sound none, so build without it. Objects built the other way
+		# are removed once so they get recompiled.
+		EXTRA_MAKE_ARGS+=("NO_USE_PIPEWIRE=1")
+		if [[ ! -f "$MAME_DIR/build/.prophecy_no_pipewire" ]]; then
+			find "$MAME_DIR/build/projects" \( -name pipewire_sound.o -o -name osdobj_common.o \) -delete 2>/dev/null || true
+			mkdir -p "$MAME_DIR/build" && touch "$MAME_DIR/build/.prophecy_no_pipewire"
+		fi
 		# MAME's emumem_* files need ~1.5 GB per cc1plus, and an OOM-killed compile
 		# can leave an empty .o that make later treats as up to date. Default to
 		# one job per 2 GB of RAM, capped at the CPU count.
