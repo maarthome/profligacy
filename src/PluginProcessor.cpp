@@ -379,7 +379,11 @@ void ProphecyAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
 	// capacity is unrelated.
 	const auto nativeLead = std::max(std::ceil(std::max(samplesPerBlock, 1) * ratio),
 		(double) quantum) + 2 * quantum + 2;
-	setLatencySamples((int) std::ceil(nativeLead / ratio));
+	// PROFLIGACY_LEAD_MS adds extra output delay so a slower-than-real-time emulator
+	// can build up a lead before it is heard (default 0).
+	double extraLead = 0.0;
+	if (const char *e = std::getenv("PROFLIGACY_LEAD_MS")) extraLead = std::max(0.0, std::atof(e));
+	setLatencySamples((int) std::ceil(nativeLead / ratio + extraLead * 0.001 * m_hostSampleRate));
 	m_engine.setHostBlockFrames((std::uint32_t) std::ceil(std::max(samplesPerBlock, 1) * ratio));
 
 	maybeBootEngine();
@@ -655,6 +659,22 @@ void ProphecyAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce
 	m_audioEngineFrames.fetch_add(got, std::memory_order_relaxed);
 	m_audioUnderrunFrames.fetch_add(needed - got, std::memory_order_relaxed);
 
+	// If the emulator runs slower than real time, the host clock overtakes it and
+	// every later block would be silent forever. After ~0.25 s of starvation,
+	// re-anchor the timeline at the engine's current position: the output delay
+	// restarts, the engine gets a fresh lead, and sound resumes (with gaps while
+	// the emulation is below 100% speed).
+	if (got * 2 < needed) ++m_starvedBlocks; else m_starvedBlocks = 0;
+	if (m_starvedBlocks * numSamples > (int) (m_hostSampleRate * 0.25))
+	{
+		const auto q = (std::uint64_t) ProphecyEngine::kAudioQuantum;
+		m_timeline.reset(m_hostSampleRate, ((m_engine.producedFrames() + q - 1) / q) * q);
+		m_timelineHostFrame = 0;
+		m_starvedBlocks = 0;
+		m_resyncs.fetch_add(1, std::memory_order_relaxed);
+		return;
+	}
+
 	for (int i = 0; i < outputCount; ++i)
 	{
 		const auto position = m_timeline.position(firstHost - latency + (std::uint64_t) i);
@@ -691,6 +711,7 @@ ProphecyAudioProcessor::DiagnosticSnapshot ProphecyAudioProcessor::diagnosticSna
 	s.audioHostFrames = m_audioHostFrames.load(std::memory_order_relaxed);
 	s.audioEngineFrames = m_audioEngineFrames.load(std::memory_order_relaxed);
 	s.audioUnderrunFrames = m_audioUnderrunFrames.load(std::memory_order_relaxed);
+	s.resyncs = m_resyncs.load(std::memory_order_relaxed);
 	s.hostMidiEvents = m_hostMidiEvents.load(std::memory_order_relaxed);
 	s.hostMidiEventsForwarded = m_hostMidiEventsForwarded.load(std::memory_order_relaxed);
 	s.lastHostMidi = m_lastHostMidi.load(std::memory_order_relaxed);
@@ -1426,6 +1447,7 @@ private:
 			<< " audio_cb=" << (juce::int64) s.audioCallbacks
 			<< " host_frames=" << (juce::int64) s.audioHostFrames
 			<< " engine_pulled=" << (juce::int64) s.audioEngineFrames
+			<< " resyncs=" << (juce::int64) s.resyncs
 			<< " underrun_frames=" << (juce::int64) s.audioUnderrunFrames
 			<< " midi_events=" << (juce::int64) s.hostMidiEvents
 			<< " last_midi=" << hex8(midi) << ":" << hex8(midi >> 8) << ":" << hex8(midi >> 16)

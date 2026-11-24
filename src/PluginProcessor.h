@@ -65,6 +65,7 @@ public:
 		std::uint64_t audioHostFrames = 0;
 		std::uint64_t audioEngineFrames = 0;
 		std::uint64_t audioUnderrunFrames = 0;
+		std::uint64_t resyncs = 0;
 		std::uint64_t hostMidiEvents = 0;
 		std::uint64_t hostMidiEventsForwarded = 0;
 		std::uint32_t lastHostMidi = 0;
@@ -587,6 +588,7 @@ private:
 	double             m_hostSampleRate = 48000.0;
 	prophecy::SampleTimeline m_timeline;
 	std::uint64_t      m_timelineHostFrame = 0;
+	int m_starvedBlocks = 0; // consecutive blocks the emulator could not supply (it runs slower than real time)
 	bool               m_timelineAttached = false;
 	std::atomic<bool>  m_lateBootStartsFreshEpoch { false };
 	int                m_preparedMaxBlock = 0;
@@ -603,6 +605,7 @@ private:
 	std::atomic<std::uint64_t> m_audioHostFrames { 0 };
 	std::atomic<std::uint64_t> m_audioEngineFrames { 0 };
 	std::atomic<std::uint64_t> m_audioUnderrunFrames { 0 };
+	std::atomic<std::uint64_t> m_resyncs { 0 };
 	std::atomic<std::uint64_t> m_hostMidiEvents { 0 };
 	std::atomic<std::uint64_t> m_hostMidiEventsForwarded { 0 };
 	std::atomic<std::uint32_t> m_lastHostMidi { 0 };
