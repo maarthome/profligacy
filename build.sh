@@ -56,7 +56,7 @@ swapon --show
 git submodule update --init --recursive
 
 # --regen only on the first run; later runs are incremental.
-if [[ -d extern/mame/build/linux_gcc ]]; then
+if [[ -d extern/mame/build/linux_gcc || -d extern/mame/build/projects/sdl/mamepropmin/gmake-linux ]]; then
 	scripts/build_mame_core.sh
 else
 	scripts/build_mame_core.sh --regen

@@ -63,6 +63,22 @@ export PATH="$SHIMDIR:$PATH"
 # the caller's option ordering; make variable assignments remain valid after it.
 (cd "$MAME_DIR" && JOBS="${JOBS:-$DEFAULT_JOBS}" ./scripts/korgprophecy_build.sh "$@" ${EXTRA_MAKE_ARGS[@]+"${EXTRA_MAKE_ARGS[@]}"} PYTHON_EXECUTABLE="$PYBIN")
 
+# Some Linux builds (seen on aarch64) leave the archives under extern/mame/scripts/
+# and the objects under build/projects/..., not in build/linux_gcc/{bin,obj}/x64/Release
+# where CMakeLists.txt looks. Link them into the expected layout.
+if [[ "$(uname -s)" == Linux && ! -f "$MAME_BIN/libemu.a" && -f "$MAME_DIR/scripts/src/libemu.a" ]]; then
+	MAME_OBJ_DIR="$MAME_DIR/build/$MAME_TOOLCHAIN_DIR/obj/x64/Release"
+	mkdir -p "$MAME_BIN/mame_propmin" "$(dirname "$MAME_OBJ_DIR")"
+	for a in "$MAME_DIR"/scripts/mame_propmin/*.a; do
+		ln -sf "$a" "$MAME_BIN/mame_propmin/$(basename "$a")"
+	done
+	while IFS= read -r a; do
+		ln -sf "$a" "$MAME_BIN/$(basename "$a")"
+	done < <(find "$MAME_DIR/scripts" -name '*.a' -not -path "$MAME_DIR/scripts/mame_propmin/*")
+	ln -sfn "$MAME_DIR/build/projects/sdl/mamepropmin/gmake-linux/obj/Release" "$MAME_OBJ_DIR"
+	echo "linked MAME archives and objects into $MAME_BIN and $MAME_OBJ_DIR"
+fi
+
 REV="$(git -C "$MAME_DIR" rev-parse HEAD)"
 DIRTY=""
 if ! git -C "$MAME_DIR" diff --quiet HEAD -- src/ 2>/dev/null; then
