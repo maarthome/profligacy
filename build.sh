@@ -84,4 +84,4 @@ cmake -S . -B "$BUILD_DIR"
 cmake --build "$BUILD_DIR" -j"${JOBS:-$(nproc)}"
 
 echo ">> build done"
-find "$BUILD_DIR" -maxdepth 4 -name 'Profligacy.lv2' -o -maxdepth 4 -name 'Profligacy.vst3' | sed 's/^/   /'
+find "$BUILD_DIR" -maxdepth 4 \( -name 'Profligacy.lv2' -o -name 'Profligacy.vst3' \) | sed 's/^/   /'
